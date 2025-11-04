@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "db.h": "c",
+        "dboperations.h": "c"
+    }
+}
