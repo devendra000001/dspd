@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include "dbManager.h"
-#define DB_FILENAME "waste_db.bin"
+#define DB_FILENAME "waste_db.txt"
 
 int main(void)
 {
