@@ -322,90 +322,120 @@ void getHighestWasteDay(){
     char date[dateOfCollectionLength];
     calculateGetHighestWasteDay(date);
 }
-
-
 int saveDatabase(const char *filename)
 {
-    FILE *fp = fopen(filename, "wb");
+    FILE *fp = fopen(filename, "w"); // open in text mode
     if (!fp)
     {
         perror("Failed to open file for writing");
         return -1;
     }
 
-    size_t written = fwrite(areaArray, sizeof(areaArray[0]), (size_t)areaArrayLength, fp);
-    if (written != (size_t)areaArrayLength)
+    // ---------- AREA ARRAY ----------
+    fprintf(fp, "===== AREA RECORDS =====\n");
+    for (int i = 0; i < areaArrayLength; i++)
     {
-        fprintf(stderr, "Failed to write all area records (wrote %zu of %d)\n", written, areaArrayLength);
-        fclose(fp);
-        return -2;
+        fprintf(fp, "Area %d:\n", i + 1);
+        fprintf(fp, "  Area ID: %d\n", areaArray[i].areaId);
+        fprintf(fp, "  Name: %s\n", areaArray[i].areaName);
+        fprintf(fp, "  Population: %d\n", areaArray[i].population);
+        fprintf(fp, "  Avg Waste per Person: %.2f kg/day\n", areaArray[i].avgWastePerPerson);
+        fprintf(fp, "------------------------------\n");
     }
 
-    written = fwrite(wasteRecordArray, sizeof(wasteRecordArray[0]), (size_t)wasteRecordArrayLength, fp);
-    if (written != (size_t)wasteRecordArrayLength)
+    // ---------- WASTE RECORDS ----------
+    fprintf(fp, "\n===== WASTE RECORDS =====\n");
+    for (int i = 0; i < wasteRecordArrayLength; i++)
     {
-        fprintf(stderr, "Failed to write all waste records (wrote %zu of %d)\n", written, wasteRecordArrayLength);
-        fclose(fp);
-        return -3;
+        fprintf(fp, "Waste Record %d:\n", i + 1);
+        fprintf(fp, "  Record ID: %d\n", wasteRecordArray[i].recordId);
+        fprintf(fp, "  Area ID (FK): %d\n", wasteRecordArray[i].areaIdForeignKey);
+        fprintf(fp, "  Date of Collection: %s\n", wasteRecordArray[i].dateOfCollection);
+        fprintf(fp, "  Total Waste Collected: %d kg\n", wasteRecordArray[i].totalWasteCollected);
+        fprintf(fp, "  Recycled Waste: %d kg\n", wasteRecordArray[i].recycledWaste);
+        fprintf(fp, "  Collection Agency: %s\n", wasteRecordArray[i].collectionAgencyName);
+        fprintf(fp, "------------------------------\n");
     }
 
-    written = fwrite(&metaDataRecord, sizeof(struct metaData), (size_t)1, fp);
-    if (written != (size_t)1)
-    {
-        fprintf(stderr, "Failed to write (wrote %zu of %d)\n", written, wasteRecordArrayLength);
-        fclose(fp);
-        return -4;
-    }
+    // ---------- METADATA ----------
+    fprintf(fp, "\n===== METADATA =====\n");
+    fprintf(fp, "Total Areas Filled: %d\n", metaDataRecord.areaArrayFilled);
+    fprintf(fp, "Total Waste Records Filled: %d\n", metaDataRecord.wasteArrayFilled);
+    fprintf(fp, "==============================\n");
 
     fclose(fp);
     return 0;
 }
-
 int loadDatabase(const char *filename)
 {
-    FILE *fp = fopen(filename, "rb");
+    FILE *fp = fopen(filename, "r"); // open in text mode
     if (!fp)
     {
-        return 1;
+        perror("Failed to open file for reading");
+        return -1;
     }
 
-    // Read area array
-    size_t read = fread(areaArray, sizeof(areaArray[0]), (size_t)areaArrayLength, fp);
-    if (read != (size_t)areaArrayLength)
+    // Clear arrays before reading
+    for (int i = 0; i < areaArrayLength; i++)
     {
-        fprintf(stderr, "Warning: area section reads %zu of %d entries. DB file may be corrupted/partial.\n", read, areaArrayLength);
-        for (size_t i = read; i < (size_t)areaArrayLength; ++i)
+        areaArray[i].areaId = -1;
+        areaArray[i].areaName[0] = '\0';
+        areaArray[i].population = -1;
+        areaArray[i].avgWastePerPerson = -1;
+    }
+    for (int i = 0; i < wasteRecordArrayLength; i++)
+    {
+        wasteRecordArray[i].recordId = -1;
+        wasteRecordArray[i].areaIdForeignKey = -1;
+        wasteRecordArray[i].dateOfCollection[0] = '\0';
+        wasteRecordArray[i].collectionAgencyName[0] = '\0';
+        wasteRecordArray[i].totalWasteCollected = -1;
+        wasteRecordArray[i].recycledWaste = -1;
+    }
+    metaDataRecord.areaArrayFilled = 0;
+    metaDataRecord.wasteArrayFilled = 0;
+
+    char line[256];
+    int section = 0;  // 1=area, 2=waste, 3=meta
+    int areaIndex = 0, wasteIndex = 0;
+
+    while (fgets(line, sizeof(line), fp))
+    {
+        if (strstr(line, "===== AREA RECORDS")) { section = 1; continue; }
+        if (strstr(line, "===== WASTE RECORDS")) { section = 2; continue; }
+        if (strstr(line, "===== METADATA")) { section = 3; continue; }
+
+        if (section == 1 && strstr(line, "Area ID:"))
         {
-            areaArray[i].areaId = -1;
-            areaArray[i].areaName[0] = '\0';
-            areaArray[i].population = -1;
-            areaArray[i].avgWastePerPerson = -1;
+            sscanf(line, "  Area ID: %hd", &areaArray[areaIndex].areaId);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Name: %50[^\n]", areaArray[areaIndex].areaName);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Population: %d", &areaArray[areaIndex].population);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Avg Waste per Person: %f", &areaArray[areaIndex].avgWastePerPerson);
+            areaIndex++;
         }
-    }
-
-    // Read wasteRecord array
-    read = fread(wasteRecordArray, sizeof(wasteRecordArray[0]), (size_t)wasteRecordArrayLength, fp);
-    if (read != (size_t)wasteRecordArrayLength)
-    {
-        fprintf(stderr, "Warning: wasteRecord section reads %zu of %d entries. DB file may be corrupted/partial.\n", read, wasteRecordArrayLength);
-        for (size_t i = read; i < (size_t)wasteRecordArrayLength; ++i)
+        else if (section == 2 && strstr(line, "Record ID:"))
         {
-            wasteRecordArray[i].recordId = -1;
-            wasteRecordArray[i].areaIdForeignKey = -1;
-            wasteRecordArray[i].collectionAgencyName[0] = '\0';
-            wasteRecordArray[i].dateOfCollection[0] = '\0';
-            wasteRecordArray[i].recycledWaste = -1;
-            wasteRecordArray[i].totalWasteCollected = -1;
+            sscanf(line, "  Record ID: %hd", &wasteRecordArray[wasteIndex].recordId);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Area ID (FK): %hd", &wasteRecordArray[wasteIndex].areaIdForeignKey);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Date of Collection: %10[^\n]", wasteRecordArray[wasteIndex].dateOfCollection);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Total Waste Collected: %d", &wasteRecordArray[wasteIndex].totalWasteCollected);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Recycled Waste: %d", &wasteRecordArray[wasteIndex].recycledWaste);
+            fgets(line, sizeof(line), fp); sscanf(line, "  Collection Agency: %50[^\n]", wasteRecordArray[wasteIndex].collectionAgencyName);
+            wasteIndex++;
         }
-    }
-
-    read = fread(&metaDataRecord, sizeof(struct metaData), (size_t)1, fp);
-    if (read != (size_t)1)
-    {
-        metaDataRecord.areaArrayFilled = 0;
-        metaDataRecord.wasteArrayFilled = 0;
+        else if (section == 3)
+        {
+            if (strstr(line, "Total Areas Filled:"))
+                sscanf(line, "Total Areas Filled: %hd", &metaDataRecord.areaArrayFilled);
+            else if (strstr(line, "Total Waste Records Filled:"))
+                sscanf(line, "Total Waste Records Filled: %hd", &metaDataRecord.wasteArrayFilled);
+        }
     }
 
     fclose(fp);
     return 0;
 }
+
+
+
+
